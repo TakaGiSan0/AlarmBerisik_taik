@@ -11,32 +11,52 @@ import java.util.Calendar
 object AlarmScheduler {
 
     fun schedule(context: Context, alarm: AlarmItem) {
-        if (!alarm.enabled) return
+        // Batalkan jadwal lama agar perubahan hari/jam berlaku.
+        cancel(context, alarm)
+
+        if (!alarm.enabled || alarm.daysOfWeek.isEmpty()) return
 
         val manager = context.getSystemService(Context.ALARM_SERVICE)
                 as AlarmManager
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             !manager.canScheduleExactAlarms()
         ) {
             return
         }
 
-        val calendar = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, alarm.hour)
-            set(Calendar.MINUTE, alarm.minute)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
+        val now = System.currentTimeMillis()
+        var nextTime: Long? = null
 
-            if (timeInMillis <= System.currentTimeMillis()) {
-                add(Calendar.DAY_OF_YEAR, 1)
+        // Cari jadwal terdekat dalam tujuh hari ke depan.
+        for (offset in 0..7) {
+            val candidate = Calendar.getInstance().apply {
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+                set(Calendar.HOUR_OF_DAY, alarm.hour)
+                set(Calendar.MINUTE, alarm.minute)
+                add(Calendar.DAY_OF_YEAR, offset)
+            }
+
+            val day = candidate.get(Calendar.DAY_OF_WEEK)
+
+            if (
+                day in alarm.daysOfWeek &&
+                candidate.timeInMillis > now
+            ) {
+                nextTime = candidate.timeInMillis
+                break
             }
         }
+
+        val triggerTime = nextTime ?: return
 
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             putExtra("alarm_id", alarm.id)
             putExtra("hour", alarm.hour)
             putExtra("minute", alarm.minute)
+            putExtra("music_uri", alarm.musicUri)
         }
 
         val pendingIntent = PendingIntent.getBroadcast(
@@ -49,13 +69,14 @@ object AlarmScheduler {
 
         manager.setExactAndAllowWhileIdle(
             AlarmManager.RTC_WAKEUP,
-            calendar.timeInMillis,
+            triggerTime,
             pendingIntent
         )
     }
 
     fun cancel(context: Context, alarm: AlarmItem) {
         val intent = Intent(context, AlarmReceiver::class.java)
+
         val pendingIntent = PendingIntent.getBroadcast(
             context,
             alarm.id,

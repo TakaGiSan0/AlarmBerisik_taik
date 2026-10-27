@@ -1,6 +1,7 @@
 
 package com.example.alarmku
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -16,12 +17,15 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
+import android.media.AudioAttributes
+import android.media.AudioManager
 
 class AlarmSoundService : Service() {
 
     private var player: MediaPlayer? = null
     private var vibrator: Vibrator? = null
 
+    @SuppressLint("ForegroundServiceType")
     override fun onStartCommand(
         intent: Intent?,
         flags: Int,
@@ -52,15 +56,16 @@ class AlarmSoundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "AlarmKu Aktif",
-                NotificationManager.IMPORTANCE_HIGH
+                "Suara Alarm",
+                NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Suara alarm yang sedang berbunyi"
+                setSound(null, null)
+                enableVibration(false)
             }
 
-            val manager =
-                getSystemService(Context.NOTIFICATION_SERVICE)
-                        as NotificationManager
+            val manager = getSystemService(
+                Context.NOTIFICATION_SERVICE
+            ) as NotificationManager
 
             manager.createNotificationChannel(channel)
         }
@@ -109,6 +114,7 @@ class AlarmSoundService : Service() {
             .build()
     }
 
+
     private fun startSound() {
         try {
             val uri = RingtoneManager.getDefaultUri(
@@ -119,6 +125,15 @@ class AlarmSoundService : Service() {
 
             if (uri != null) {
                 player = MediaPlayer().apply {
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .setContentType(
+                                AudioAttributes.CONTENT_TYPE_SONIFICATION
+                            )
+                            .build()
+                    )
+
                     setDataSource(this@AlarmSoundService, uri)
                     isLooping = true
                     prepare()
@@ -130,6 +145,7 @@ class AlarmSoundService : Service() {
             player = null
         }
     }
+
 
     private fun startVibration() {
         try {
